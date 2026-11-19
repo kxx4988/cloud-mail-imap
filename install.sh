@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# cloud-mail IMAP/SMTP 网关一键安装脚本  v0.2.29
+# cloud-mail IMAP/SMTP 网关一键安装脚本  v0.2.30
 #
 # 用法（由 cloud-mail 网页端「设置 → 第三方客户端」自动生成，域名已填好）：
 #   curl -fsSL https://raw.githubusercontent.com/kxx4988/cloud-mail-imap/main/install.sh \
@@ -157,7 +157,7 @@ wait_for() {
 }
 
 echo "=============================================="
-echo " cloud-mail IMAP/SMTP 网关安装 v0.2.29"
+echo " cloud-mail IMAP/SMTP 网关安装 v0.2.30"
 echo "  站点   : $WORKER"
 echo "  IMAP域 : $DOMAIN"
 echo "  目录   : $INSTALL_DIR"

@@ -126,7 +126,29 @@ npm run smoke -- --port 993 --user you@example.com --pass <应用密码> --folde
 
 ## 版本与更新
 
-当前镜像 `ghcr.io/kxx4988/cloud-mail-imap:v0.2.29`；逐版本变更见 [CHANGELOG.md](CHANGELOG.md)。
+当前镜像 `ghcr.io/kxx4988/cloud-mail-imap:v0.2.30`
+
+| 版本 | 做了什么 |
+|---|---|
+| **v0.2.30**（当前） | 文档：新增版本历史表与发布规范，回填历史 tag 的完整变更说明 |
+| v0.2.29 | 安装脚本交互重做：时间轴进度、按回车立即检测、连续失败自动诊断、到上限不退出 |
+| v0.2.28 | 文档修正：安装命令改一行式、断言数 212→245、停止命令改 `docker compose stop` |
+| v0.2.27 | 首次开源发布：IMAP 993 / SMTP 2465 网关、245 项断言门禁、主流客户端兼容 |
+
+逐版本完整变更见 [CHANGELOG.md](CHANGELOG.md)。
+
+### 发布规范
+
+打 tag 时说明**必须写清这版做了什么**，禁止只写版本号：
+
+- 格式：`vX.Y.Z — 一句话摘要` + 空行 + 变更要点列表
+- 摘要要能让人只翻 Tags 页面就知道这版改了什么
+- 同步在本 CHANGELOG 追加同一条目
+
+```bash
+git tag -a v0.2.30 -F /path/to/notes.txt   # 用文件写多行说明，别用 -m 挤一行
+git push origin v0.2.30
+```
 
 ## License
 
