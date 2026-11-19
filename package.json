@@ -1,6 +1,6 @@
 {
   "name": "cloud-mail-imap",
-  "version": "0.2.28",
+  "version": "0.2.29",
   "private": true,
   "type": "module",
   "description": "IMAP/SMTP gateway for cloud-mail (Cloudflare Workers backend)",

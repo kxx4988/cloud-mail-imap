@@ -1,0 +1,36 @@
+# 更新日志
+
+镜像标签与本节版本号一一对应：`ghcr.io/kxx4988/cloud-mail-imap:v0.2.29`
+
+## v0.2.29 — 安装脚本交互重做
+
+**install.sh 体验改造（核心：不让你无提示地干等，也不允许跳过）**
+
+- 每轮输出时间轴：`已等待 mm:ss / 上限 mm:ss ｜ 第 N 次未通过`
+- 支持 **按回车立即重新检测**（`curl | bash` 下用 `/dev/tty` 抢回键盘输入；抢不到自动降级纯轮询）
+- 轮询节奏：前 2 分钟 15 秒/次，之后 30 秒/次；DNS 关卡单轮上限 30 分钟，证书 20 分钟
+- 连续 3 次不通过自动打印诊断：
+  - DNS：本机与 1.1.1.1 / 8.8.8.8 的实际解析值、与公网 IP 的差异原因（主机名错/旧 IP/橙云代理）
+  - 证书：`acme.sh` 日志尾巴，或已有证书的 SAN 与期望域名
+  - 容器：`State.Status` + 最近 12 行日志
+  - 端口：监听状态 + 容器状态 + 日志尾巴
+  - 站点：`curl -I` 响应头
+- 到达单轮上限**不再 `exit 1`**：提示「按回车继续再等一轮 / Ctrl+C 退出」，已完成步骤不会重复
+- 放弃自签证书兜底（此前已生效，本次仅强化诊断文案）
+- 结尾报告增加总耗时，并保留「脚本无法代劳」强提醒（安全组放行 993/2465、站点生成应用密码）
+
+**文档**：README 新增「脚本交互」表格；本 CHANGELOG 建立。
+
+## v0.2.28 — 文档修正
+
+- 安装命令改为 `curl ... | sudo bash -s --` 一行式（与网页端生成的一致，无需先下源码）
+- 回归门禁断言数 212 → 245（实际数量）
+- 停止命令 `systemctl stop cmimap` → `docker compose stop`（容器无 systemd unit）
+
+## v0.2.27 — 首次开源发布
+
+- 公开仓库与 GHCR 镜像首发；版本 0.2.27 对应线上长期运行的网关能力
+- IMAP 993 / SMTP 2465（隐式 TLS）；Apple Mail / Outlook / Foxmail / Thunderbird 兼容
+- 命令支持：LOGIN / AUTHENTICATE PLAIN、LIST / SELECT / STATUS、FETCH（含 `BODY[...]` 各段与部分取）、SEARCH（含 CHARSET）、STORE、EXPUNGE、COPY / MOVE / APPEND
+- `CREATE / DELETE / RENAME / SUBSCRIBE` 明确回 `NO`（站内只有固定系统文件夹，不谎报能力）
+- 构建期 245 项回归断言在 Dockerfile 内强制执行，断言不过就不出镜像

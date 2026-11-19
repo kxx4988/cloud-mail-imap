@@ -27,7 +27,22 @@ curl -fsSL https://raw.githubusercontent.com/kxx4988/cloud-mail-imap/main/instal
 
 > 由 cloud-mail 网页端「设置 → 第三方客户端」生成的命令已自动填好这两个参数，复制粘贴即可。
 
-脚本会自动：装 Docker（缺则装）→ 校验 DNS（没加好会**停下来等你**，自动轮询）→ 申请 Let's Encrypt 证书（签发失败会停下，不用自签兜底）→ 拉镜像起容器 → 健康自检 → 打印客户端参数与「还没做的事」清单。
+脚本会自动：装 Docker（缺则装）→ 校验 DNS → 申请 Let's Encrypt 证书 → 验证续签机制 → 拉镜像起容器 → 健康自检 → 端口握手 → 站点连通 → 打印客户端参数与「还没做的事」清单。
+
+**脚本交互（v0.2.29 起，不让你无提示地干等）**：
+
+| 场景 | 脚本行为 |
+|---|---|
+| 任一关卡未通过 | 弹「安装已停下」醒目框 + 该步修复指引，**不继续、不跳过** |
+| 等待期间 | 每轮显示 `已等待 mm:ss / 上限 mm:ss ｜ 第 N 次未通过` |
+| 想立刻重试 | 任何时刻按 **回车** = 立即重新检测（不用等到下一轮） |
+| 轮询节奏 | 前 2 分钟 **15 秒/次**，之后 **30 秒/次**（DNS 生效通常很快，早发现早继续） |
+| 连续 3 次不过 | 自动打印诊断：DNS 实际解析值 / 证书 SAN / 容器状态 + 日志尾巴 / 端口监听 / curl 响应头 |
+| DNS 本机缓存 | 本机查不到时自动改用 1.1.1.1 / 8.8.8.8 直查兜底（避免"明明加了却一直不过"） |
+| 到达单轮上限 | **不退出、不跳过**：提示可继续再等一轮，`Ctrl+C` 才退出（重跑不会重复已完成步骤） |
+| 非交互环境 | 自动降级为纯轮询（不需要按回车），不会卡住等输入 |
+
+单轮上限：DNS 30 分钟，证书 20 分钟，其余 5~10 分钟（可用 `MAX_WAIT` / `DNS_MAX_WAIT` 环境变量覆盖）。
 
 ### 第 2 步：生成应用密码
 
@@ -93,7 +108,7 @@ docker compose up -d --build         # 或 docker compose up -d 直接用 GHCR �
 | `src/smtp.js` | SMTP 会话与发信 |
 | `src/worker-client.js` | cloud-mail Worker API 客户端（token 缓存 / 三层缓存） |
 | `patches/apply-imap-patches.mjs` | 对 `@rafters/mail-imap` 的 22 组运行时补丁（构建时幂等执行） |
-| `install.sh` | 一键安装（DNS/证书强制关卡 + 完成后强提醒） |
+| `install.sh` | 一键安装（强制关卡 + 时间轴 + 按回车立即检测 + 诊断 + 完成后强提醒） |
 | `scripts/verify-*.mjs` | 构建期回归门禁（245 项断言，Dockerfile 内强制执行） |
 | `docs/examples/` | 证书续签 / systemd 参考（1Panel 用户可直接参考） |
 
@@ -108,6 +123,10 @@ npm run smoke -- --port 993 --user you@example.com --pass <应用密码> --folde
 
 实测部分国内链路对 465 直接 RST、587 收不到 banner，因此默认只挂 **2465**。
 代码仍支持按需挂回：`SMTP_PORT` / `SMTP_PORT_ALT` / `SMTP_PORT_STARTTLS` 写 `0` 或留空即关闭。
+
+## 版本与更新
+
+当前镜像 `ghcr.io/kxx4988/cloud-mail-imap:v0.2.29`；逐版本变更见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## License
 
