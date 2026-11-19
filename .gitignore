@@ -1,0 +1,7 @@
+# 证书与本地状态不进版本库
+certs/*.pem
+data/*.db
+data/*.db-journal
+node_modules/
+.env
+*.log

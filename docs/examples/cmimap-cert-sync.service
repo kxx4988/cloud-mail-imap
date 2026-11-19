@@ -1,0 +1,14 @@
+[Unit]
+Description=cloud-mail IMAP 证书同步（1Panel → cmimap certs，S37）
+Documentation=file:/opt/cloud-mail-imap/README.md
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/cmimap-cert-sync.env
+ExecStart=/opt/cloud-mail-imap/scripts/sync-1panel-cert.sh
+TimeoutStartSec=300
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

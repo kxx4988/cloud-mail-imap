@@ -1,0 +1,20 @@
+[Unit]
+Description=cloud-mail IMAP/SMTP Gateway (S37)
+Documentation=https://email.example.com
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/cloud-mail-imap
+ExecStart=/usr/bin/docker compose up -d --remove-orphans
+ExecStop=/usr/bin/docker compose stop
+ExecReload=/usr/bin/docker compose restart
+TimeoutStartSec=300
+TimeoutStopSec=120
+# 停止后不自动拉起容器（配合 compose 的 unless-stopped）
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+[Unit]
+Description=每日两次同步 imap.example.com 证书（05:40 / 17:40）
+
+[Timer]
+OnCalendar=*-*-* 05:40:00
+OnCalendar=*-*-* 17:40:00
+Persistent=true
+RandomizedDelaySec=120
+AccuracySec=1min
+Unit=cmimap-cert-sync.service
+
+[Install]
+WantedBy=timers.target

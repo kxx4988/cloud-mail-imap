@@ -1,0 +1,56 @@
+# [S37] cloud-mail IMAP/SMTP 网关
+#
+# 使用镜像（推荐，GitHub Actions 自动构建）：
+#   docker compose up -d
+# 本地构建（改了源码时）：
+#   docker compose up -d --build
+#
+# 必须先创建 .env（参考 .env.example），WORKER_BASE 缺失会启动失败并给出提示。
+# 证书放 ./certs/{fullchain.pem,privkey.pem}，install.sh 会自动申请；
+# 也可以手动放置后直接 docker compose up -d。
+
+name: cmimap
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/kxx4988/cloud-mail-imap:latest
+    container_name: cmimap
+    restart: unless-stopped
+    mem_limit: 700m
+    mem_reservation: 128m
+    cpus: 1.0
+    ports:
+      - "${IMAP_PORT:-993}:993"
+      - "${SMTP_PORT:-2465}:2465"
+    volumes:
+      - ./certs:/certs:ro
+      - ./data:/data
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      NODE_ENV: production
+      CERT_DIR: /certs
+      IMAP_PORT: "993"
+      SMTP_PORT: "2465"
+      SMTP_PORT_ALT: "0"
+      SMTP_PORT_STARTTLS: "0"
+      BIND_HOST: "0.0.0.0"
+      # 你的 cloud-mail 站点地址（必填，不带末尾斜杠）
+      WORKER_BASE: "${WORKER_BASE:?请先创建 .env 并设置 WORKER_BASE=https://你的站点域名}"
+      WORKER_TIMEOUT_MS: "20000"
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - cmimap
+
+networks:
+  cmimap:
+    name: cmimap_net
+    driver: bridge
