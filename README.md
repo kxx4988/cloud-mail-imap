@@ -4,6 +4,7 @@
 
 - **邮件数据一份不动**：正文与附件仍在 Cloudflare D1 / R2，网关只通过现有 API 读写
 - **随时可停**：`cd /opt/cloud-mail-imap && docker compose stop` 后 webmail 收发完全不受影响
+- **随时可升级**：`docker compose pull` + `up -d --force-recreate` 换成新版，**证书 / `data` / `.env` 都不动**；回滚只需把镜像改回旧版本号 —— 见 [升级到新版本](#升级到新版本)
 - **不需要 25 端口、不接管 MX**：不影响现有收信链路，只多开 993 / 2465 两个口
 - **账号级强隔离**：每个用户只能访问自己的邮箱；发件身份必须等于认证邮箱
 

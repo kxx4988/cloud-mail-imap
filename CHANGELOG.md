@@ -13,6 +13,7 @@
 
 **新增**：
 
+- README 顶部项目说明补一条「**随时可升级**」：一句话给出换版命令、说明证书与数据不动、回滚方式，并链到升级章节
 - README 新增「升级到新版本」章节：`docker compose pull` → `up -d --force-recreate` → `image prune` 三步
 - 说明为何必须 `--force-recreate`：只 `up -d` 时 Compose 认为容器配置未变，可能仍是旧镜像在跑
 - 明确列出升级**不影响**的东西：`certs/`、`data/`、`.env`、云端邮件数据
