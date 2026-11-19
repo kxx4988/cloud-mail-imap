@@ -14,6 +14,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 需要全部 tag 才能判断哪个是最新版本
+
+      # latest 只由「版本号最高」的 tag 更新。
+      # 否则重建历史 tag（比如补说明后 force push）会把 latest 覆盖成旧镜像。
+      - id: highest
+        name: 判断是否为最高版本 tag
+        run: |
+          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
+            echo "非 tag 触发，不更新 latest"
+            echo "is_latest=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          HIGHEST=$(git tag -l 'v*' --sort=-v:refname | head -1)
+          echo "当前 tag: ${GITHUB_REF_NAME} / 最高 tag: ${HIGHEST}"
+          if [ "${HIGHEST}" = "${GITHUB_REF_NAME}" ]; then
+            echo "is_latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_latest=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: docker/setup-buildx-action@v3
 
@@ -29,7 +49,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           tags: |
             type=ref,event=tag
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=latest,enable=${{ steps.highest.outputs.is_latest == 'true' }}
 
       - uses: docker/build-push-action@v6
         with:

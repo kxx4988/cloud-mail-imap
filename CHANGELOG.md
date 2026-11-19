@@ -1,10 +1,25 @@
 # 更新日志
 
-镜像标签与本节版本号一一对应：`ghcr.io/kxx4988/cloud-mail-imap:v0.2.30`
+镜像标签与本节版本号一一对应：`ghcr.io/kxx4988/cloud-mail-imap:v0.2.31`
 
 > **发布规范**：每个 tag 的说明必须写清「这版做了什么」，禁止只写版本号。
 > 格式为 `vX.Y.Z — 一句话摘要` + 空行 + 变更要点列表；摘要要能让人只翻 GitHub Tags 页面就看懂。
 > 同时在本文件追加同一条目，两者内容一致。
+
+## v0.2.31 — CI 修正：latest 只由最高版本 tag 更新
+
+**问题**：workflow 原来给每个 `v*` tag 都打 `latest`，重建历史 tag（如补写说明后 force push）
+会把 `latest` 覆盖成旧镜像。本次实测 `latest` 一度指向 `v0.2.27` 的镜像。
+
+**修复**：
+
+- workflow 新增「判断是否为最高版本 tag」步骤：用 `git tag -l 'v*' --sort=-v:refname` 取最高版本，
+  仅当当前 tag 与之相等时才更新 `latest`
+- `checkout` 改为 `fetch-depth: 0`（需要全部 tag 才能比较）
+- 重建历史 tag 只更新自己的 tag，不动 `latest`
+- 镜像内容同 v0.2.30
+
+> 操作提示：以后若要修改历史 tag 说明，force push 后不会再影响 `latest`，无需额外补推最新 tag。
 
 ## v0.2.30 — 文档：版本历史表与 tag 说明规范
 
