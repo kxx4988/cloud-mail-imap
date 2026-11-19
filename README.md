@@ -3,7 +3,7 @@
 让 Apple Mail、Outlook、Foxmail、Thunderbird、手机自带邮件 App 通过标准 **IMAP 993 / SMTP 2465** 收发你的 cloud-mail（Cloudflare Workers 版）邮箱。
 
 - **邮件数据一份不动**：正文与附件仍在 Cloudflare D1 / R2，网关只通过现有 API 读写
-- **随时可停**：`sudo systemctl stop cmimap`（或 `docker compose stop`）后 webmail 收发完全不受影响
+- **随时可停**：`cd /opt/cloud-mail-imap && docker compose stop` 后 webmail 收发完全不受影响
 - **不需要 25 端口、不接管 MX**：不影响现有收信链路，只多开 993 / 2465 两个口
 - **账号级强隔离**：每个用户只能访问自己的邮箱；发件身份必须等于认证邮箱
 
@@ -18,11 +18,14 @@
 | 记录值 | 你 VPS 的公网 IP |
 | Cloudflare | **必须「仅 DNS」灰云 ☁️** —— 橙云代理会让 993 永远连不上 |
 
-### 第 1 步：在 VPS 上跑安装脚本
+### 第 1 步：在 VPS 上跑安装脚本（一条命令，无需下源码）
 
 ```bash
-sudo bash install.sh --worker https://你的站点 --domain imap.你的域名
+curl -fsSL https://raw.githubusercontent.com/kxx4988/cloud-mail-imap/main/install.sh \
+  | sudo bash -s -- --worker https://你的站点 --domain imap.你的域名
 ```
+
+> 由 cloud-mail 网页端「设置 → 第三方客户端」生成的命令已自动填好这两个参数，复制粘贴即可。
 
 脚本会自动：装 Docker（缺则装）→ 校验 DNS（没加好会**停下来等你**，自动轮询）→ 申请 Let's Encrypt 证书（签发失败会停下，不用自签兜底）→ 拉镜像起容器 → 健康自检 → 打印客户端参数与「还没做的事」清单。
 
@@ -91,13 +94,13 @@ docker compose up -d --build         # 或 docker compose up -d 直接用 GHCR �
 | `src/worker-client.js` | cloud-mail Worker API 客户端（token 缓存 / 三层缓存） |
 | `patches/apply-imap-patches.mjs` | 对 `@rafters/mail-imap` 的 22 组运行时补丁（构建时幂等执行） |
 | `install.sh` | 一键安装（DNS/证书强制关卡 + 完成后强提醒） |
-| `scripts/verify-*.mjs` | 构建期回归门禁（212 项断言，Dockerfile 内强制执行） |
+| `scripts/verify-*.mjs` | 构建期回归门禁（245 项断言，Dockerfile 内强制执行） |
 | `docs/examples/` | 证书续签 / systemd 参考（1Panel 用户可直接参考） |
 
 ## 本地自检
 
 ```bash
-npm run verify   # 212 项断言，不需要网络
+npm run verify   # 245 项断言，不需要网络
 npm run smoke -- --port 993 --user you@example.com --pass <应用密码> --folder INBOX
 ```
 
