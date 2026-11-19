@@ -72,6 +72,46 @@ docker compose up -d --build         # 或 docker compose up -d 直接用 GHCR �
 
 镜像：`ghcr.io/kxx4988/cloud-mail-imap:latest`（打 tag 自动构建）。
 
+## 升级到新版本
+
+已经部署好的机器**不要用重跑 `install.sh` 的方式升级** —— 那会重走 8 道校验（DNS / 80 端口 / 签证书），既慢，还可能重复申请证书。正确做法是替换镜像：
+
+```bash
+cd /opt/cloud-mail-imap          # 手动安装的换成你的实际目录
+docker compose pull              # 拉取新镜像
+docker compose up -d --force-recreate
+docker image prune -f            # 可选：清理旧镜像
+```
+
+`--force-recreate` 不能省：只执行 `up -d` 时 Compose 认为容器配置没变，可能不重建，结果还是旧镜像在跑。
+
+**升级不会碰这些东西**：
+
+| 项 | 原因 |
+|---|---|
+| `certs/` 证书与私钥 | 宿主机目录挂载（`./certs:/certs:ro`），容器重建不动文件 |
+| `data/` | 同上（`./data:/data`） |
+| `.env`（`WORKER_BASE`、端口） | 宿主机文件，重建时只读取 |
+| 邮件正文与附件 | 存 Cloudflare D1 / R2，网关本身不落库 |
+
+**确认真的升上去了**：
+
+```bash
+docker ps --filter name=cmimap --format '{{.Status}}'                       # Up ... (healthy) 才算好
+docker images ghcr.io/kxx4988/cloud-mail-imap --format '{{.Tag}}  {{.CreatedAt}}'
+```
+
+镜像没有内置版本号标签，看 `latest` 那行的 `CreatedAt` 是不是刚才即可；再用客户端连一次 993 / 2465 收发一封最稳。
+
+**回滚到指定版本**：每个发行的 tag 都有对应镜像（`v0.2.31`、`v0.2.30` …），把 compose 里的镜像换成具体版本再重建：
+
+```bash
+sed -i 's|cloud-mail-imap:latest|cloud-mail-imap:v0.2.31|' docker-compose.yml
+docker compose up -d --force-recreate
+```
+
+> 生产环境建议**直接固定版本**：把 `docker-compose.yml` 的 `image:` 写成 `:v0.2.32`，以后升级改成新版本号再 `up -d`。这样任何一次 `pull` 都不会带来非预期的变更。
+
 ## 命令支持
 
 | 命令 | 状态 | 备注 |
@@ -126,11 +166,12 @@ npm run smoke -- --port 993 --user you@example.com --pass <应用密码> --folde
 
 ## 版本与更新
 
-当前镜像 `ghcr.io/kxx4988/cloud-mail-imap:v0.2.31`
+当前镜像 `ghcr.io/kxx4988/cloud-mail-imap:v0.2.32`
 
 | 版本 | 做了什么 |
 |---|---|
-| **v0.2.31**（当前） | CI 修正：`latest` 只由版本号最高的 tag 更新，重建历史 tag 不再污染 latest |
+| **v0.2.32**（当前） | 文档：新增「升级到新版本」（三步替换镜像、为何要 `--force-recreate`、回滚与固定版本建议） |
+| v0.2.31 | CI 修正：`latest` 只由版本号最高的 tag 更新，重建历史 tag 不再污染 latest |
 | v0.2.30 | 文档：新增版本历史表与发布规范，回填历史 tag 的完整变更说明 |
 | v0.2.29 | 安装脚本交互重做：时间轴进度、按回车立即检测、连续失败自动诊断、到上限不退出 |
 | v0.2.28 | 文档修正：安装命令改一行式、断言数 212→245、停止命令改 `docker compose stop` |
