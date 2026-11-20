@@ -1,4 +1,4 @@
-# cloud-mail IMAP / SMTP 网关
+# cloud-mail-hongchen IMAP / SMTP 网关
 
 让 Apple Mail、Outlook、Foxmail、Thunderbird、手机自带邮件 App 通过标准 **IMAP 993 / SMTP 2465** 收发你的 cloud-mail-hongchen（Cloudflare Workers 版）邮箱。
 
