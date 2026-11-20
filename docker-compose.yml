@@ -40,6 +40,12 @@ services:
       # 你的 cloud-mail 站点地址（必填，不带末尾斜杠）
       WORKER_BASE: "${WORKER_BASE:?请先创建 .env 并设置 WORKER_BASE=https://你的站点域名}"
       WORKER_TIMEOUT_MS: "20000"
+      # [v0.2.33] 网关心跳上报：install.sh 的 --hb-url / --hb-key 写进 .env；
+      # 未配置时网关侧自动跳过，不影响 IMAP / SMTP 服务。
+      HB_URL: "${HB_URL:-}"
+      HB_KEY: "${HB_KEY:-}"
+      HB_DOMAIN: "${HB_DOMAIN:-}"
+      HB_INTERVAL_MS: "${HB_INTERVAL_MS:-3600000}"
     security_opt:
       - no-new-privileges:true
     logging:

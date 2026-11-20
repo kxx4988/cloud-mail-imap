@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # ============================================================
-# cloud-mail IMAP/SMTP 网关一键安装脚本  v0.2.32
+# cloud-mail IMAP/SMTP 网关一键安装脚本  v0.2.33
 #
 # 用法（由 cloud-mail 网页端「设置 → 第三方客户端」自动生成，域名已填好）：
 #   curl -fsSL https://raw.githubusercontent.com/kxx4988/cloud-mail-imap/main/install.sh \
 #     | sudo bash -s -- --worker https://mail.example.com --domain imap.example.com
+#   站点启用「网关状态」后，生成的命令还会自动带 --hb-url / --hb-key（心跳上报）。
 #
 # 交互说明（v0.2.29 起）：
 #   · 每个关卡都有时间轴：已等待 mm:ss / 上限 mm:ss，不会让你无提示地干等
@@ -30,6 +31,8 @@ DOMAIN=""
 LE_EMAIL=""
 IMAP_PORT="993"
 SMTP_PORT="2465"
+HB_URL=""
+HB_KEY=""
 
 usage() {
   sed -n '2,19p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//' || true
@@ -41,6 +44,8 @@ usage() {
   --email   你的邮箱             可选，Let's Encrypt 通知邮箱
   --port-imap 993                可选，宿主机 IMAP 端口
   --port-smtp 2465               可选，宿主机 SMTP 端口
+  --hb-url  https://你的站点     可选，网关心跳上报地址（站点「网关部署」命令自带）
+  --hb-key  <64位hex>            可选，心跳上报密钥（站点永久保存，勿泄露）
   -h, --help                     显示本帮助
 EOF
   exit 0
@@ -52,6 +57,8 @@ while [ $# -gt 0 ]; do
     --email)    LE_EMAIL="$2"; shift 2 ;;
     --port-imap) IMAP_PORT="$2"; shift 2 ;;
     --port-smtp) SMTP_PORT="$2"; shift 2 ;;
+    --hb-url)   HB_URL="$2"; shift 2 ;;
+    --hb-key)   HB_KEY="$2"; shift 2 ;;
     --help|-h)  usage ;;
     *) echo "未知参数：$1（--help 查看用法）" >&2; exit 2 ;;
   esac
@@ -157,7 +164,7 @@ wait_for() {
 }
 
 echo "=============================================="
-echo " cloud-mail IMAP/SMTP 网关安装 v0.2.32"
+echo " cloud-mail IMAP/SMTP 网关安装 v0.2.33"
 echo "  站点   : $WORKER"
 echo "  IMAP域 : $DOMAIN"
 echo "  目录   : $INSTALL_DIR"
@@ -170,16 +177,29 @@ echo "=============================================="
 
 # ---------------------------------------------------------- [1/8] 环境
 echo "── [1/8] 检查系统环境"
+# 公网 IP 判定：hostname -I 在 NAT / 内网环境常返回 10.* / 172.16-31.* / 192.168.*，
+# 拿内网地址去要求 DNS 指向会永远过不去，且提示里的「记录值」还是错的，必须识别出来。
+is_public_ipv4() {
+  local ip="$1"
+  [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
+  case "$ip" in
+    0.*|10.*|127.*|169.254.*|192.168.*|224.*|255.*|172.1[6-9].*|172.2[0-9].*|172.3[0-1].*) return 1 ;;
+  esac
+  return 0
+}
 if [ -z "${PUBLIC_IP:-}" ]; then
   PUBLIC_IP="$(curl -s4 --max-time 8 https://api.ipify.org || true)"
   [ -z "$PUBLIC_IP" ] && PUBLIC_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 fi
-wait_for "探测不到本机公网 IP" \
-"│  修复方法：确认本机能上网；或在 VPS 控制台查到公网 IP 后：       │
+wait_for "探测不到可用的公网 IP" \
+"│  修复方法：确认本机能上网（api.ipify.org 可访问）；               │
+│  或在 VPS 控制台查到公网 IP 后执行：                             │
 │     export PUBLIC_IP=你的公网IP                                 │
-│  然后重跑本脚本。                                                │" \
-  '[ -n "$PUBLIC_IP" ]' 300 \
-  'echo "api.ipify.org：$(curl -s4 --max-time 5 https://api.ipify.org || echo 无响应)"; echo "hostname -I：$(hostname -I 2>/dev/null || echo 取不到)"'
+│  然后重跑本脚本。                                                │
+│  ⚠️ 若 hostname -I 取到的是 10.* / 172.16~31.* / 192.168.*，    │
+│     那是内网地址，脚本不会拿它去校验 DNS。                       │" \
+  '[ -n "$PUBLIC_IP" ] && is_public_ipv4 "$PUBLIC_IP"' 300 \
+  'echo "api.ipify.org：$(curl -s4 --max-time 5 https://api.ipify.org || echo 无响应)"; echo "hostname -I：$(hostname -I 2>/dev/null || echo 取不到)"; echo "当前采用：$PUBLIC_IP"; is_public_ipv4 "$PUBLIC_IP" || echo "→ 当前值是内网/保留地址，请 export PUBLIC_IP=真实公网IP 后重跑"'
 mark_done "本机公网 IP：${PUBLIC_IP}"
 
 if ! command -v docker >/dev/null 2>&1; then
@@ -260,22 +280,47 @@ if [ ! -f docker-compose.yml ]; then
 else
   mark_done "使用当前目录已有的 docker-compose.yml"
 fi
+# 保留旧 .env 里的心跳配置：用户中途重跑、没再带 --hb-url/--hb-key 时不能被抹掉
+old_hb_url=""; old_hb_key=""; old_hb_domain=""
+if [ -f .env ]; then
+  old_hb_url="$(grep -E '^HB_URL=' .env 2>/dev/null | head -1 | cut -d= -f2-)"
+  old_hb_key="$(grep -E '^HB_KEY=' .env 2>/dev/null | head -1 | cut -d= -f2-)"
+  old_hb_domain="$(grep -E '^HB_DOMAIN=' .env 2>/dev/null | head -1 | cut -d= -f2-)"
+fi
+[ -z "$HB_URL" ] && HB_URL="$old_hb_url"
+[ -z "$HB_KEY" ] && HB_KEY="$old_hb_key"
+[ -z "$old_hb_domain" ] && old_hb_domain="$DOMAIN"
 cat > .env <<EOF
 WORKER_BASE=$WORKER
 IMAP_PORT=$IMAP_PORT
 SMTP_PORT=$SMTP_PORT
+HB_URL=$HB_URL
+HB_KEY=$HB_KEY
+HB_DOMAIN=$old_hb_domain
+HB_INTERVAL_MS=3600000
 EOF
 chmod 600 .env
-mark_done ".env 已写入（WORKER_BASE=${WORKER}）"
+if [ -n "$HB_URL" ] && [ -n "$HB_KEY" ]; then
+  mark_done ".env 已写入（WORKER_BASE=${WORKER}，心跳上报已启用）"
+else
+  mark_done ".env 已写入（WORKER_BASE=${WORKER}）"
+fi
 
 # ---------------------------------------------------------- [4/8] 证书 + 续签（强制关卡）
 echo "── [4/8] 申请 Let's Encrypt 证书 + 续签机制验证（强制关卡）"
 port80_ok() { ! (ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep -qE ':80\s'; }
-wait_for "80 端口被占用（Let's Encrypt HTTP-01 验证需要它）" \
-"│  修复方法：找到并停掉占用 80 端口的服务（签证书只用几分钟）：    │
-│     ss -ltnp | grep ':80 '          # 看是谁占用                │
-│     systemctl stop xxx              # 临时停掉它                │
-│  停掉后按【回车】立即检测。                                      │" \
+wait_for "80 端口被占用（Let's Encrypt HTTP-01 需要临时独占 80）" \
+"│  本脚本【不会】替你停掉正在运行的服务，也不会改你的防火墙。       │
+│  先查是谁占着 80：                                               │
+│     (ss -ltnp || netstat -ltnp) | grep ':80 '                   │
+│  然后自行三选一：                                                 │
+│   1. 临时停掉，签完【立刻】拉起（成对执行，别只停不起）：          │
+│        systemctl stop <服务名>   # 或 docker stop <容器名>         │
+│        按【回车】继续签发 → 成功后 systemctl start <服务名>        │
+│   2. 若 80 上是你的站点/面板、不想中断 → 本脚本不适合你，           │
+│      请改用「手动安装」+ 自带证书（见 README 手动安装章节）         │
+│   3. 有 DNS API 凭据可用 DNS-01 验证，本脚本当前不支持             │
+│  脚本只走 acme.sh 自动签发这一条路，不接管任何外部证书。            │" \
   'port80_ok' 600 \
   '(ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null) | grep -E ":80\s" || echo "未查到占用进程（可能需 root 才能看到进程名）"'
 
@@ -309,17 +354,27 @@ cert_diag() {
     echo "acme.sh 最近日志："
     tail -12 "$HOME/.acme.sh/acme.sh.log" 2>/dev/null | sed 's/^/  /' || echo "  （无日志）"
   else
-    echo "证书已存在，SAN：$(openssl x509 -in "$f" -noout -text 2>/dev/null | grep -A1 'Subject Alternative Name' | tail -1 | tr -d ' ')"
+    local san
+    san="$(openssl x509 -in "$f" -noout -text 2>/dev/null | grep -A1 'Subject Alternative Name' | tail -1 | tr -d ' ')"
+    echo "证书已存在，SAN：${san:-（无法解析，文件可能不是有效 PEM）}"
     echo "期望包含：DNS:${DOMAIN}"
+    if [ -z "$san" ] || ! echo "$san" | grep -q "DNS:${DOMAIN}"; then
+      echo "→ 这是上次失败留下的无效 / 域名不匹配证书，issue_cert 会跳过重签。"
+      echo "  请自行删除后按【回车】：rm -f $INSTALL_DIR/certs/{fullchain.pem,privkey.pem}"
+    fi
   fi
 }
-wait_for "Let's Encrypt 证书未签发成功" \
-"│  常见原因（按概率排序）：                                        │
-│   1. 云厂商安全组没放行 80 端口 ← 最常见！去控制台加入站规则     │
-│   2. DNS 刚加还没全球生效（等 2~5 分钟即可）                     │
-│   3. 本周该域名签发次数达 Let's Encrypt 限额（50 张/周）         │
-│  注意：本脚本不用自签证书糊弄——签发成功才会继续。               │
-│  手动放好证书到 $INSTALL_DIR/certs/ 后按【回车】也会检测通过。   │" \
+wait_for "未检测到由本脚本签发的有效证书" \
+"│  本脚本只走 acme.sh 自动签发这一条路，不接管外部证书。            │
+│  常见原因（按概率排序）：                                         │
+│   1. 云厂商安全组没放行 80 端口 ← 最常见！去控制台加入站规则      │
+│   2. DNS 刚加还没全球生效（等 2~5 分钟即可）                      │
+│   3. 本周该域名签发次数达 Let's Encrypt 限额（50 张/周）          │
+│   4. certs/ 里有上次失败留下的无效证书 → 删掉它再按【回车】重签：  │
+│        rm -f $INSTALL_DIR/certs/{fullchain.pem,privkey.pem}       │
+│      脚本不会替你删文件。                                         │
+│  自带 / 面板 / 自签证书请用「手动安装」，本脚本不支持。            │
+│  本脚本不用自签证书糊弄——签发成功才会继续。                      │" \
   'cert_valid' 1200 'cert_diag'
 mark_done "Let's Encrypt 正式证书已签发（SAN 含 ${DOMAIN}，openssl 校验通过）"
 
@@ -328,7 +383,7 @@ RENEW_CONF="$HOME/.acme.sh"
 if ! crontab -l 2>/dev/null | grep -q 'acme.sh'; then
   "$ACME" --install-cronjob >/dev/null 2>&1 || true
 fi
-if ! crontab -l 2>/dev/null | grep -q 'acme.sh'; then
+if [ -x "$ACME" ] && ! (crontab -l 2>/dev/null | grep -q 'acme.sh'); then
   cat > /etc/systemd/system/acme-mail-renew.service <<EOF
 [Unit]
 Description=acme.sh daily renew (cloud-mail imap gateway)
@@ -349,9 +404,15 @@ EOF
   systemctl daemon-reload && systemctl enable --now acme-mail-renew.timer >/dev/null 2>&1 || true
 fi
 renew_ok() {
-  crontab -l 2>/dev/null | grep -q 'acme.sh' || systemctl is-enabled acme-mail-renew.timer >/dev/null 2>&1
+  # 必须先确认 acme.sh 真的可执行：否则「timer enabled 但 ExecStart 指向不存在的二进制」
+  # 会造成续签假阳性——关卡显示通过，实际每天什么都没干。
+  [ -x "$ACME" ] || return 1
+  crontab -l 2>/dev/null | grep -q 'acme.sh' && return 0
+  systemctl is-enabled acme-mail-renew.timer >/dev/null 2>&1 && return 0
+  return 1
 }
 renew_diag() {
+  echo "acme.sh 可执行文件：$ACME（$([ -x "$ACME" ] && echo 存在 || echo 不存在)）"
   echo "crontab 中的 acme 条目：$(crontab -l 2>/dev/null | grep -c 'acme.sh') 条"
   echo "acme-mail-renew.timer：$(systemctl is-enabled acme-mail-renew.timer 2>&1 | head -1)"
   echo "续签排期文件：$(grep -rls 'Le_NextRenewTime' "$RENEW_CONF" --include='*.conf' 2>/dev/null | head -1 || true)"
@@ -361,7 +422,9 @@ wait_for "证书自动续签机制未生效" \
 │   a. 手动装 cron：crontab -e 加入：                             │
 │      0 1 * * * \"$ACME\" --cron --home \"$RENEW_CONF\" >/dev/null│
 │   b. 手动装 systemd：                                           │
-│      systemctl enable --now acme-mail-renew.timer               │" \
+│      systemctl enable --now acme-mail-renew.timer               │
+│  本脚本只验证 acme.sh 续签；外部 / 面板托管证书请走手动安装，      │
+│  其续签不在本关卡范围内。                                        │" \
   'renew_ok' 600 'renew_diag'
 renew_next="$(grep -rls 'Le_NextRenewTime' "$RENEW_CONF" --include='*.conf' 2>/dev/null | head -1)"
 if [ -n "$renew_next" ]; then
@@ -438,16 +501,19 @@ echo "── [8/8] 校验与你 cloud-mail 站点的连通"
 worker_ok() {
   local c
   c="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$WORKER/" || true)"
-  [ -n "$c" ] && [ "$c" != "000" ]
+  # 只判「非 000」会让填错成任意能响应的网址（403/404/500）也过关，等客户端
+  # 登录 401 才发现。这里要求 2xx / 3xx。
+  [[ "$c" =~ ^[23][0-9][0-9]$ ]]
 }
 wait_for "无法访问你的 cloud-mail 站点 $WORKER" \
-"│  修复方法：                                                     │
+"│  只有 2xx / 3xx 才算通过；403 / 404 / 500 一律不通过。           │
+│  修复方法：                                                     │
 │   1. 确认 --worker 填的是你站点真实地址（浏览器能打开）          │
 │   2. 本机 curl -I $WORKER 看返回                                │
 │   3. 填错的话：改 $INSTALL_DIR/.env 的 WORKER_BASE 后           │
 │      docker compose up -d 重建，再按【回车】检测                 │" \
   'worker_ok' 600 \
-  'echo "curl -I 结果："; curl -sI --max-time 8 "$WORKER/" 2>&1 | head -3 | sed "s/^/  /" || echo "  无响应"'
+  'echo "GET / 状态码：$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 "$WORKER/" || echo 000)"; echo "curl -I 结果："; curl -sI --max-time 8 "$WORKER/" 2>&1 | head -3 | sed "s/^/  /" || echo "  无响应"'
 mark_done "站点可达：$WORKER"
 
 # ============================================================
@@ -472,6 +538,9 @@ echo "║         加入站规则；系统内 ufw/iptables 本脚本没动）   
 echo "║  2. 【必须】应用密码要你自己生成：                        ║"
 echo "║       登录 $WORKER → 个人设置 → 第三方客户端 →            ║"
 echo "║       生成 16 位应用密码（客户端密码栏填它，不是登录密码）║"
+echo "║  3. 【建议】回站点保存网关域名（不保存会显示推断值）：      ║"
+echo "║       $WORKER → 系统设置 → 网关部署 → 齿轮 → 保存         ║"
+echo "║       要填的值：$DOMAIN                                  ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo
 echo "📮 客户端配置（做完上面 1、2 后填这些）："
@@ -482,8 +551,12 @@ echo "   │ 用户名    ：你的完整邮箱地址"
 echo "   │ 密码      ：站点生成的应用密码（第 2 条）"
 echo "   └──────────────────────────────────────────────"
 echo
-echo "🔁 证书续签：已装定时任务（每天 01:00 检查），无需人工干预。"
+echo "🔁 证书续签：已配置 acme.sh 定时任务（每天 01:00 检查），建议验证一次。"
 echo "   验证：crontab -l | grep acme   或   systemctl list-timers | grep acme"
+echo "   本脚本只管自己签的证书；自带 / 面板证书请走手动安装并自行续签。"
+if [ -n "$HB_URL" ] && [ -n "$HB_KEY" ]; then
+  echo "📡 网关心跳：已启用，可在站点「系统设置 → 网关状态」查看在线状态（密钥不显示）。"
+fi
 echo
 echo "🎉 全部完成。没做第 1、2 条之前，客户端是登录不了的——别跳过。"
 exit 0

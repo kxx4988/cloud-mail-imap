@@ -26,7 +26,12 @@ curl -fsSL https://raw.githubusercontent.com/kxx4988/cloud-mail-imap/main/instal
   | sudo bash -s -- --worker https://你的站点 --domain imap.你的域名
 ```
 
-> 由 cloud-mail 网页端「设置 → 第三方客户端」生成的命令已自动填好这两个参数，复制粘贴即可。
+> 由 cloud-mail 网页端「设置 → 第三方客户端 / 系统设置 → 网关部署」生成的命令已自动填好参数，复制粘贴即可。
+> 站点启用「网关状态」时，命令还会自动带 `--hb-url` / `--hb-key`（心跳上报，见下文）。
+>
+> ⚠️ **本脚本只走 acme.sh 自动签发证书这一条路**：要求 80 端口空闲；任一关卡不过就停下并打印原因，
+> **不跳过、不替你停掉正在运行的服务、也不接管外部证书**。若证书由 1Panel / 宝塔 / certbot / 自签等方式管理，
+> 请改用[手动安装](#手动安装不用脚本)，并自行负责续签与重启容器。
 
 脚本会自动：装 Docker（缺则装）→ 校验 DNS → 申请 Let's Encrypt 证书 → 验证续签机制 → 拉镜像起容器 → 健康自检 → 端口握手 → 站点连通 → 打印客户端参数与「还没做的事」清单。
 
@@ -107,11 +112,30 @@ docker images ghcr.io/kxx4988/cloud-mail-imap --format '{{.Tag}}  {{.CreatedAt}}
 **回滚到指定版本**：每个发行的 tag 都有对应镜像（`v0.2.31`、`v0.2.30` …），把 compose 里的镜像换成具体版本再重建：
 
 ```bash
-sed -i 's|cloud-mail-imap:latest|cloud-mail-imap:v0.2.31|' docker-compose.yml
+sed -i 's|cloud-mail-imap:latest|cloud-mail-imap:v0.2.32|' docker-compose.yml
 docker compose up -d --force-recreate
 ```
 
-> 生产环境建议**直接固定版本**：把 `docker-compose.yml` 的 `image:` 写成 `:v0.2.32`，以后升级改成新版本号再 `up -d`。这样任何一次 `pull` 都不会带来非预期的变更。
+> 生产环境建议**直接固定版本**：把 `docker-compose.yml` 的 `image:` 写成 `:v0.2.33`，以后升级改成新版本号再 `up -d`。这样任何一次 `pull` 都不会带来非预期的变更。
+
+## 网关状态（心跳上报，v0.2.33 起）
+
+站点跑在 Cloudflare Workers，没有原始 TCP、也不能访问 993 / 2465，所以**无法主动探测网关**，只能由网关定时上报。站点「系统设置 → 网关部署」生成的命令会带两个参数：
+
+| 参数 | 说明 |
+|---|---|
+| `--hb-url https://你的站点` | 上报地址，网关会 POST 到 `${HB_URL}/api/imap/heartbeat` |
+| `--hb-key <64位hex>` | 站点签发的永久密钥，写进 `.env`（权限 600），**不进镜像、不进日志** |
+
+行为：
+
+- 容器启动立即上报一次，之后每 **60 分钟**一次（`HB_INTERVAL_MS` 可覆盖，最小 1 分钟）
+- 上报内容：网关版本、网关域名、证书剩余天数、运行时长、时间戳
+- 站点据此显示「在线 · 版本 · 证书剩余天数」；证书临近到期可直接在站点看到，无需每台机器单独配告警
+- **心跳是旁路**：网络异常 / 密钥错误只打 warn 日志，绝不影响 IMAP / SMTP 收发
+- 未配置这两个参数时（v0.2.32 升级上来、或手动安装），模块自动跳过
+
+> 站点侧业务错误返回的 HTTP 状态仍是 200（body 为 `{code:401}`），网关按 body 的 `code` 判定，不会把「密钥错误」误当成上报成功。
 
 ## 命令支持
 
@@ -148,15 +172,16 @@ docker compose up -d --force-recreate
 | `src/sections.js` | `BODY[...]` 段定位（多层嵌套与部分取） |
 | `src/smtp.js` | SMTP 会话与发信 |
 | `src/worker-client.js` | cloud-mail Worker API 客户端（token 缓存 / 三层缓存） |
+| `src/heartbeat.js` | 网关状态心跳上报（旁路，失败不影响邮件服务） |
 | `patches/apply-imap-patches.mjs` | 对 `@rafters/mail-imap` 的 22 组运行时补丁（构建时幂等执行） |
 | `install.sh` | 一键安装（强制关卡 + 时间轴 + 按回车立即检测 + 诊断 + 完成后强提醒） |
-| `scripts/verify-*.mjs` | 构建期回归门禁（245 项断言，Dockerfile 内强制执行） |
+| `scripts/verify-*.mjs` | 构建期回归门禁（268 项断言，Dockerfile 内强制执行） |
 | `docs/examples/` | 证书续签 / systemd 参考（1Panel 用户可直接参考） |
 
 ## 本地自检
 
 ```bash
-npm run verify   # 245 项断言，不需要网络
+npm run verify   # 268 项断言，不需要网络
 npm run smoke -- --port 993 --user you@example.com --pass <应用密码> --folder INBOX
 ```
 
@@ -167,11 +192,12 @@ npm run smoke -- --port 993 --user you@example.com --pass <应用密码> --folde
 
 ## 版本与更新
 
-当前镜像 `ghcr.io/kxx4988/cloud-mail-imap:v0.2.32`
+当前镜像 `ghcr.io/kxx4988/cloud-mail-imap:v0.2.33`
 
 | 版本 | 做了什么 |
 |---|---|
-| **v0.2.32**（当前） | 文档：新增「升级到新版本」（三步替换镜像、为何要 `--force-recreate`、回滚与固定版本建议） |
+| **v0.2.33**（当前） | 新增网关状态心跳上报；修安装脚本 5 处判定与关卡文案（80 端口只提示不代停、公网 IP 内网兜底、续签假阳性、站点连通只认 2xx/3xx、遗留坏证书提示、.env 保留心跳配置）；断言 245 → 268 |
+| v0.2.32 | 文档：新增「升级到新版本」（三步替换镜像、为何要 `--force-recreate`、回滚与固定版本建议） |
 | v0.2.31 | CI 修正：`latest` 只由版本号最高的 tag 更新，重建历史 tag 不再污染 latest |
 | v0.2.30 | 文档：新增版本历史表与发布规范，回填历史 tag 的完整变更说明 |
 | v0.2.29 | 安装脚本交互重做：时间轴进度、按回车立即检测、连续失败自动诊断、到上限不退出 |

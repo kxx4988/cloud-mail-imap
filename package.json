@@ -1,13 +1,13 @@
 {
   "name": "cloud-mail-imap",
-  "version": "0.2.32",
+  "version": "0.2.33",
   "private": true,
   "type": "module",
   "description": "IMAP/SMTP gateway for cloud-mail (Cloudflare Workers backend)",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "verify": "node scripts/verify-mime.mjs && node scripts/verify-sections.mjs && node scripts/verify-search.mjs && node scripts/verify-session.mjs && node scripts/verify-to.mjs && node scripts/verify-auth.mjs",
+    "verify": "node scripts/verify-mime.mjs && node scripts/verify-sections.mjs && node scripts/verify-search.mjs && node scripts/verify-session.mjs && node scripts/verify-to.mjs && node scripts/verify-auth.mjs && node scripts/verify-append.mjs && node scripts/verify-heartbeat.mjs",
     "smoke": "node scripts/smoke-imap.mjs",
     "diag": "node scripts/diag-body.mjs",
     "probe": "node scripts/probe-protocol.mjs"

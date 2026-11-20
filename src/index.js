@@ -15,6 +15,7 @@ import { createImapServer } from '@rafters/mail-imap-server';
 import { authAdapter, mailboxAdapter, messageAdapter, extensionAdapter } from './adapters.js';
 import { createSmtpStarter } from './smtp.js';
 import { login, authedRequest } from './worker-client.js';
+import { startHeartbeat } from './heartbeat.js';
 
 // worker-client 的 login / authedRequest 供 SMTP AUTH 与发信直接复用
 const workerClient = { login, authedRequest };
@@ -135,10 +136,14 @@ if (SMTP_STARTTLS_PORT > 0) {
   console.log('[smtp] 587 STARTTLS 入口已关闭（SMTP_PORT_STARTTLS=0）');
 }
 
+/* ------------------------------------------------------------------ 心跳上报（旁路，失败不影响邮件服务） */
+const heartbeat = startHeartbeat();
+
 /* ------------------------------------------------------------------ 优雅退出 */
 
 function shutdown(signal) {
   console.log(`[lifecycle] 收到 ${signal}，正在关闭监听…`);
+  try { heartbeat?.stop(); } catch (e) { /* 忽略 */ }
   try { imap.close(); } catch (e) { /* 忽略 */ }
   for (const s of smtpServers) {
     try { s.close(); } catch (e) { /* 忽略 */ }

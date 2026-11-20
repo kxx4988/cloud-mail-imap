@@ -24,7 +24,7 @@ COPY src ./src
 # v0.2.18 起加 verify-auth：AUTHENTICATE PLAIN 与 SEARCH CHARSET（第三方客户端兼容）。
 # v0.2.20 起加 verify-append：APPEND 去重 + COPY/MOVE 开关（发信后存副本不再弹窗）。
 COPY scripts ./scripts
-RUN node scripts/verify-mime.mjs && node scripts/verify-sections.mjs && node scripts/verify-search.mjs && node scripts/verify-session.mjs && node scripts/verify-to.mjs && node scripts/verify-auth.mjs && node scripts/verify-append.mjs
+RUN node scripts/verify-mime.mjs && node scripts/verify-sections.mjs && node scripts/verify-search.mjs && node scripts/verify-session.mjs && node scripts/verify-to.mjs && node scripts/verify-auth.mjs && node scripts/verify-append.mjs && node scripts/verify-heartbeat.mjs
 
 # 非 root 运行（内置 node 用户 uid 1000）；证书以 644 + 只读挂载传入
 USER node
