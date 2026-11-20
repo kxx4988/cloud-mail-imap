@@ -1,6 +1,6 @@
 # cloud-mail IMAP / SMTP 网关
 
-让 Apple Mail、Outlook、Foxmail、Thunderbird、手机自带邮件 App 通过标准 **IMAP 993 / SMTP 2465** 收发你的 cloud-mail（Cloudflare Workers 版）邮箱。
+让 Apple Mail、Outlook、Foxmail、Thunderbird、手机自带邮件 App 通过标准 **IMAP 993 / SMTP 2465** 收发你的 cloud-mail-hongchen（Cloudflare Workers 版）邮箱。
 
 - **邮件数据一份不动**：正文与附件仍在 Cloudflare D1 / R2，网关只通过现有 API 读写
 - **随时可停**：`cd /opt/cloud-mail-imap && docker compose stop` 后 webmail 收发完全不受影响
@@ -26,7 +26,7 @@ curl -fsSL https://raw.githubusercontent.com/kxx4988/cloud-mail-imap/main/instal
   | sudo bash -s -- --worker https://你的站点 --domain imap.你的域名
 ```
 
-> 由 cloud-mail 网页端「设置 → 第三方客户端 / 系统设置 → 网关部署」生成的命令已自动填好参数，复制粘贴即可。
+> 由 cloud-mail-hongchen 网页端「设置 → 第三方客户端 / 系统设置 → 网关部署」生成的命令已自动填好参数，复制粘贴即可。
 > 站点启用「网关状态」时，命令还会自动带 `--hb-url` / `--hb-key`（心跳上报，见下文）。
 >
 > ⚠️ **本脚本只走 acme.sh 自动签发证书这一条路**：要求 80 端口空闲；任一关卡不过就停下并打印原因，
